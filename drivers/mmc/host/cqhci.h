@@ -90,6 +90,10 @@
 /* send status config 1 */
 #define CQHCI_SSC1			0x40
 #define CQHCI_SSC1_CBC_MASK		GENMASK(19, 16)
+/* send status config 1 */
+#define CQHCI_SSC1			0x40
+#define SEND_QSR_INTERVAL 0x70000
+#define CQHCI_SSC1_CIT_EN   (1 << 20)
 
 /* send status config 2 */
 #define CQHCI_SSC2			0x44
@@ -99,6 +103,10 @@
 
 /* response mode error mask */
 #define CQHCI_RMEM			0x50
+
+/* write protection violation */
+#define WP_ERASE_SKIP		(1 << 15)
+#define WP_VIOLATION		(1 << 26)
 
 /* task error info */
 #define CQHCI_TERRI			0x54
@@ -123,6 +131,29 @@
 #define CQHCI_INT_ALL			0xF
 #define CQHCI_IC_DEFAULT_ICCTH		31
 #define CQHCI_IC_DEFAULT_ICTOVAL	1
+
+/* Int mask */
+#define CQHCI_DATAINTMASK1	0x124
+#define CQHCI_CMDINTMASK2	0x128
+
+/* Data Interrupt MASK */
+#define DATA_DONE		(1 << 0)
+#define DATA_CRC_ERR		(1 << 1)
+#define DATA_RTIMEOUT		(1 << 2)
+#define HOST_TIMEOUT		(1 << 3)
+#define FIFO_UNDERRUN		(1 << 4)
+#define START_BIT_ERR		(1 << 5)
+#define END_BIT_ERR		(1 << 6)
+
+/* CMD Interrupt MASK 1 */
+#define RESP_ERR		(1 << 0)
+#define CMD_DONE		(1 << 1)
+#define RESP_CRC_ERR		(1 << 2)
+#define RESP_TIMEOUT		(1 << 3)
+#define HW_LOCK_ERR		(1 << 4)
+
+/* Device Reseponse */
+#define RESP_DEVICE_STATE	0xFDF9A080
 
 /* attribute fields */
 #define CQHCI_VALID(x)			(((x) & 1) << 0)
@@ -180,7 +211,22 @@ enum cqhci_crypto_alg {
 	CQHCI_CRYPTO_ALG_AES_ECB		= 2,
 	CQHCI_CRYPTO_ALG_ESSIV_AES_CBC		= 3,
 };
+enum dw_mci_cq_log_cmd {
+	CQ_LOG_CMD_READ = 1,
+	CQ_LOG_CMD_WRITE,
+	CQ_LOG_CMD_DISCARD,
+	CQ_LOG_CMD_FLUSH,
+};
 
+struct cmdq_log_ctx {
+	u32	idx;
+
+	u32	x0;	/* data0: tag, data1: tag */
+	u32	x1;	/* data0: dbr, data1: dbr */
+	u32	x2;	/* data0: cmd, data1:  */
+	u32	x3;	/* data0: lba, data1:  */
+	u32	x4;	/* data0: sct, data1:  */
+};
 /* x-CRYPTOCAP - Crypto Capability X */
 union cqhci_crypto_cap_entry {
 	__le32 reg_val;
@@ -243,7 +289,7 @@ struct cqhci_host {
 	bool activated;
 	bool waiting_for_idle;
 	bool recovery_halt;
-
+	bool will_remove;
 	size_t desc_size;
 	size_t data_size;
 
@@ -268,7 +314,7 @@ struct cqhci_host {
 	struct completion halt_comp;
 	wait_queue_head_t wait_queue;
 	struct cqhci_slot *slot;
-
+	u32 cmd_log_idx[32];
 #ifdef CONFIG_MMC_CRYPTO
 	union cqhci_crypto_capabilities crypto_capabilities;
 	union cqhci_crypto_cap_entry *crypto_cap_array;
@@ -290,6 +336,16 @@ struct cqhci_host_ops {
 	int (*program_key)(struct cqhci_host *cq_host,
 			   const union cqhci_crypto_cfg_entry *cfg, int slot);
 #endif
+	void (*cmdq_pre_setting)(struct mmc_host *mmc, bool set);
+	void (*sicd_setting)(struct mmc_host *mmc, bool set);
+	int (*crypto_engine_cfg)(struct mmc_host *mmc, void *desc,
+				struct mmc_data *data, int page_index, bool cmdq_enabled);
+	int (*crypto_engine_clear)(struct mmc_host *mmc, void *desc,
+				struct mmc_data *data, bool cmdq_enabled);
+	int (*reset)(struct mmc_host *mmc, bool cqe_reset);
+	void (*cmdq_log)(struct mmc_host *mmc, bool new_cmd,
+				struct cmdq_log_ctx *log_ctx);
+	void (*err_check)(struct mmc_host *mmc, u32 cmd_error, u32 data_error, u32 status);
 };
 
 static inline void cqhci_writel(struct cqhci_host *host, u32 val, int reg)

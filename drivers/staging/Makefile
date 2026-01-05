@@ -41,3 +41,5 @@ obj-$(CONFIG_XIL_AXIS_FIFO)	+= axis-fifo/
 obj-$(CONFIG_FIELDBUS_DEV)     += fieldbus/
 obj-$(CONFIG_QLGE)		+= qlge/
 obj-$(CONFIG_WFX)		+= wfx/
+obj-$(CONFIG_NANOHUB)		+= nanohub/
+obj-$(CONFIG_EXYNOS_LPD)	+= lpd/

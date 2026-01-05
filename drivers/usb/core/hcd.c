@@ -41,6 +41,9 @@
 #include "usb.h"
 #include "phy.h"
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+#include "../host/xhci-exynos-audio.h"
+#endif
 
 /*-------------------------------------------------------------------------*/
 
@@ -76,6 +79,9 @@
  */
 
 /*-------------------------------------------------------------------------*/
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+extern struct xhci_exynos_audio *g_xhci_exynos_audio;
+#endif
 
 /* Keep track of which host controller drivers are loaded */
 unsigned long usb_hcds_loaded;
@@ -2576,6 +2582,9 @@ struct usb_hcd *__usb_create_hcd(const struct hc_driver *driver,
 		struct usb_hcd *primary_hcd)
 {
 	struct usb_hcd *hcd;
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	struct platform_device *pdev = to_platform_device(dev);
+#endif
 
 	hcd = kzalloc(sizeof(*hcd) + driver->hcd_priv_size, GFP_KERNEL);
 	if (!hcd)
@@ -2599,6 +2608,13 @@ struct usb_hcd *__usb_create_hcd(const struct hc_driver *driver,
 		}
 		mutex_init(hcd->bandwidth_mutex);
 		dev_set_drvdata(dev, hcd);
+
+		if (!strcmp("xhci-hcd", driver->description)) {
+			dev_info(dev, "xhci-hcd detected\n");
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+			g_xhci_exynos_audio->hcd = hcd;
+#endif
+		}
 	} else {
 		mutex_lock(&usb_port_peer_mutex);
 		hcd->address0_mutex = primary_hcd->address0_mutex;
@@ -2608,6 +2624,21 @@ struct usb_hcd *__usb_create_hcd(const struct hc_driver *driver,
 		hcd->shared_hcd = primary_hcd;
 		primary_hcd->shared_hcd = hcd;
 		mutex_unlock(&usb_port_peer_mutex);
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+		/* Get USB2.0 PHY for main hcd */
+		if (dev->parent) {
+			/* pdev describes dwc3->xhci */
+			xhci_exynos_audio_init(dev->parent, pdev);
+
+			/* Get USB2.0 PHY for main hcd */
+			g_xhci_exynos_audio->phy = devm_phy_get(dev->parent, "usb2-phy");
+			if (IS_ERR_OR_NULL(g_xhci_exynos_audio->phy)) {
+				g_xhci_exynos_audio->phy = NULL;
+				dev_err(dev, "%s: failed to get phy\n", __func__);
+			}
+		}
+#endif
 	}
 
 	kref_init(&hcd->kref);

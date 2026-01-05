@@ -52,7 +52,15 @@ obj-$(CONFIG_MMC_CAVIUM_THUNDERX) += thunderx-mmc.o
 obj-$(CONFIG_MMC_DW)		+= dw_mmc.o
 obj-$(CONFIG_MMC_DW_PLTFM)	+= dw_mmc-pltfm.o
 obj-$(CONFIG_MMC_DW_BLUEFIELD)	+= dw_mmc-bluefield.o
+ifeq ($(CONFIG_SEC_MMC_FEATURE),y)
+obj-$(CONFIG_MMC_DW_EXYNOS)	+= dw_mmc-exynos-sec.o
+dw_mmc-exynos-sec-y		+= dw_mmc-exynos.o mmc-sec-feature.o mmc-sec-sysfs.o
+else
 obj-$(CONFIG_MMC_DW_EXYNOS)	+= dw_mmc-exynos.o
+endif
+ifeq ($(CONFIG_MMC_DW_EXYNOS_FMP),y)
+obj-$(CONFIG_MMC_DW_EXYNOS)	+= dw_mmc-exynos-fmp.o
+endif
 obj-$(CONFIG_MMC_DW_HI3798CV200) += dw_mmc-hi3798cv200.o
 obj-$(CONFIG_MMC_DW_K3)		+= dw_mmc-k3.o
 obj-$(CONFIG_MMC_DW_PCI)	+= dw_mmc-pci.o
@@ -103,9 +111,13 @@ cqhci-y					+= cqhci-core.o
 cqhci-$(CONFIG_MMC_CRYPTO)		+= cqhci-crypto.o
 obj-$(CONFIG_MMC_HSQ)			+= mmc_hsq.o
 
+CFLAGS += -Wno-shift-count-overflow
+
 ifeq ($(CONFIG_CB710_DEBUG),y)
 	CFLAGS-cb710-mmc	+= -DDEBUG
 endif
 
 obj-$(CONFIG_MMC_SDHCI_XENON)	+= sdhci-xenon-driver.o
 sdhci-xenon-driver-y		+= sdhci-xenon.o sdhci-xenon-phy.o
+
+obj-$(CONFIG_MMC_SRPMB)		+= dw_mmc-srpmb.o

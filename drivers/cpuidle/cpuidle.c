@@ -787,6 +787,6 @@ static int __init cpuidle_init(void)
 	return cpuidle_add_interface(cpu_subsys.dev_root);
 }
 
-module_param(off, int, 0444);
+module_param(off, int, 0664);
 module_param_string(governor, param_governor, CPUIDLE_NAME_LEN, 0444);
 core_initcall(cpuidle_init);

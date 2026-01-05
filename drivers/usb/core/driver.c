@@ -31,9 +31,16 @@
 #include <linux/usb.h>
 #include <linux/usb/quirks.h>
 #include <linux/usb/hcd.h>
+#include <linux/phy/phy-usb.h>
 
 #include "usb.h"
+#include "../host/xhci-exynos-audio.h"
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+extern struct xhci_exynos_audio *g_xhci_exynos_audio;
+#endif
+#define PHY_MODE_SUSPEND_BYPASS		0x35
+#define PHY_MODE_RESUME_BYPASS		0x36
 
 /*
  * Adds a new dynamic USBdevice ID to this driver,
@@ -1399,11 +1406,42 @@ static int usb_suspend_both(struct usb_device *udev, pm_message_t msg)
 	int			status = 0;
 	int			i = 0, n = 0;
 	struct usb_interface	*intf;
+	struct usb_device	*hdev;
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	int			bypass;
+#endif
+
+	if (!udev || !udev->bus || !udev->bus->root_hub) {
+		pr_info("%s: bypass udev 0\n", __func__);
+		goto main;
+	}
 
 	if (udev->state == USB_STATE_NOTATTACHED ||
 			udev->state == USB_STATE_SUSPENDED)
 		goto done;
 
+	hdev = udev->bus->root_hub;
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	if (!g_xhci_exynos_audio->hcd) {
+		pr_info("%s: hcd 0\n", __func__);
+		goto main;
+	}
+
+	/* check main hcd */
+	if (g_xhci_exynos_audio->hcd->self.root_hub != hdev)
+		goto main;
+
+	bypass = phy_set_mode_ext(g_xhci_exynos_audio->phy,
+			 PHY_MODE_SUSPEND_BYPASS, 0);
+
+	pr_info("%s: bypass = %d\n", __func__, bypass);
+
+	if (bypass)
+		goto done;
+#endif
+
+main:
 	/* Suspend all the interfaces and then udev itself */
 	if (udev->actconfig) {
 		n = udev->actconfig->desc.bNumInterfaces;
@@ -1500,11 +1538,42 @@ static int usb_resume_both(struct usb_device *udev, pm_message_t msg)
 	int			status = 0;
 	int			i;
 	struct usb_interface	*intf;
+	struct usb_device	*hdev;
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	int			bypass;
+#endif
+
+	if (!udev || !udev->bus || !udev->bus->root_hub) {
+		pr_info("%s: bypass udev 0\n", __func__);
+		goto main;
+	}
 
 	if (udev->state == USB_STATE_NOTATTACHED) {
 		status = -ENODEV;
 		goto done;
 	}
+
+	hdev = udev->bus->root_hub;
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	if (!g_xhci_exynos_audio->hcd) {
+		pr_info("%s: hcd 0\n", __func__);
+		goto main;
+	}
+
+	if (g_xhci_exynos_audio->hcd->self.root_hub != hdev)
+		goto main;
+
+	bypass = phy_set_mode_ext(g_xhci_exynos_audio->phy,
+			 PHY_MODE_RESUME_BYPASS, 0);
+
+	pr_info("%s: bypass = %d\n", __func__, bypass);
+
+	if (bypass)
+		goto done;
+#endif
+
+main:
 	udev->can_submit = 1;
 
 	/* Resume the device */

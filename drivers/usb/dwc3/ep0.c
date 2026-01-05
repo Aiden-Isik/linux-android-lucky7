@@ -228,7 +228,8 @@ void dwc3_ep0_stall_and_restart(struct dwc3 *dwc)
 
 	/* stall is always issued on EP0 */
 	dep = dwc->eps[0];
-	__dwc3_gadget_ep_set_halt(dep, 1, false);
+	/* for MTP reset issue */
+	__dwc3_gadget_ep_set_halt(dep, 1, true);
 	dep->flags = DWC3_EP_ENABLED;
 	dwc->delayed_status = false;
 
@@ -236,10 +237,7 @@ void dwc3_ep0_stall_and_restart(struct dwc3 *dwc)
 		struct dwc3_request	*req;
 
 		req = next_request(&dep->pending_list);
-		if (!dwc->connected)
-			dwc3_gadget_giveback(dep, req, -ESHUTDOWN);
-		else
-			dwc3_gadget_giveback(dep, req, -ECONNRESET);
+		dwc3_gadget_giveback(dep, req, -ECONNRESET);
 	}
 
 	dwc->eps[0]->trb_enqueue = 0;
@@ -284,7 +282,10 @@ void dwc3_ep0_out_start(struct dwc3 *dwc)
 	dwc3_ep0_prepare_one_trb(dep, dwc->ep0_trb_addr, 8,
 			DWC3_TRBCTL_CONTROL_SETUP, false);
 	ret = dwc3_ep0_start_trans(dep);
-	WARN_ON(ret < 0);
+
+	if (ret < 0)
+		dev_err(dwc->dev, "%s: error, ret = %d", __func__, ret);
+
 	for (i = 2; i < DWC3_ENDPOINTS_NUM; i++) {
 		struct dwc3_ep *dwc3_ep;
 
@@ -296,10 +297,7 @@ void dwc3_ep0_out_start(struct dwc3 *dwc)
 			continue;
 
 		dwc3_ep->flags &= ~DWC3_EP_DELAY_STOP;
-		if (dwc->connected)
-			dwc3_stop_active_transfer(dwc3_ep, true, true);
-		else
-			dwc3_remove_requests(dwc, dwc3_ep, -ESHUTDOWN);
+		dwc3_stop_active_transfer(dwc3_ep, true, true);
 	}
 }
 
@@ -1115,7 +1113,8 @@ void dwc3_ep0_end_control_data(struct dwc3 *dwc, struct dwc3_ep *dep)
 	cmd |= DWC3_DEPCMD_PARAM(dep->resource_index);
 	memset(&params, 0, sizeof(params));
 	ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
-	WARN_ON_ONCE(ret);
+	if (ret < 0)
+		dev_info(dwc->dev, "Send gadget EP CMD error!! ret: %d\n", ret);
 	dep->resource_index = 0;
 }
 

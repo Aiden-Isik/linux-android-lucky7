@@ -3901,6 +3901,9 @@ int hci_register_dev(struct hci_dev *hdev)
 {
 	int id, error;
 
+	// Not alloc rfkill for Watch FE
+	return -1;
+
 	if (!hdev->open || !hdev->close || !hdev->send)
 		return -EINVAL;
 

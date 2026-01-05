@@ -85,6 +85,9 @@
 
 #define wlun_dev_to_hba(dv) shost_priv(to_scsi_device(dv)->host)
 
+/* Maximum number that the hardware allows for request. */
+#define UFSHCD_MAX_HW_SECTORS 2048 /* 1 MB */
+
 #define ufshcd_toggle_vreg(_dev, _vreg, _on)				\
 	({                                                              \
 		int _ret;                                               \
@@ -102,6 +105,8 @@
 		       16, 4, buf, __len, false);                        \
 } while (0)
 
+#undef START_STOP_TIMEOUT
+#define START_STOP_TIMEOUT            (20 * HZ)
 /*
  * ANDROID: this mutex is used to serialize devfreq and sysfs write booster
  * toggling, it was taken out of struct ufs_hba from commit b03f7ed9af6e ("scsi:
@@ -6230,6 +6235,12 @@ static void ufshcd_err_handler(struct work_struct *work)
 	}
 
 	/*
+	 * silent ufs dump when occurred ah8 error for debug
+	 */
+	if (ufshcd_is_link_broken(hba) && (hba->saved_err & UIC_ERROR))
+		ufshcd_print_evt_hist(hba);
+
+	/*
 	 * if host reset is required then skip clearing the pending
 	 * transfers forcefully because they will get cleared during
 	 * host reset and restore
@@ -6480,6 +6491,8 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba, u32 intr_status)
 	}
 
 	trace_android_vh_ufs_check_int_errors(hba, queue_eh_work);
+	if (ufshcd_is_link_broken(hba))
+		queue_eh_work = true;
 
 	if (queue_eh_work) {
 		/*
@@ -8264,9 +8277,10 @@ static struct scsi_host_template ufshcd_driver_template = {
 	.eh_device_reset_handler = ufshcd_eh_device_reset_handler,
 	.eh_host_reset_handler   = ufshcd_eh_host_reset_handler,
 	.this_id		= -1,
-	.sg_tablesize		= SG_ALL,
+	.sg_tablesize		= SG_UFS,
 	.cmd_per_lun		= UFSHCD_CMD_PER_LUN,
 	.can_queue		= UFSHCD_CAN_QUEUE,
+	.max_sectors            = UFSHCD_MAX_HW_SECTORS,
 	.max_segment_size	= PRDT_DATA_BYTE_COUNT_MAX,
 	.max_host_blocked	= 1,
 	.track_queue_depth	= 1,

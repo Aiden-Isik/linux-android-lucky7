@@ -1542,14 +1542,14 @@ void mmc_blk_cqe_recovery(struct mmc_queue *mq)
 	struct mmc_host *host = card->host;
 	int err;
 
-	pr_debug("%s: CQE recovery start\n", mmc_hostname(host));
+	pr_info("%s: CQE recovery start\n", mmc_hostname(host));
 
 	err = mmc_cqe_recovery(host);
 	if (err || host->cqe_recovery_reset_always)
 		mmc_blk_reset(mq->blkdata, host, MMC_BLK_CQE_RECOVERY);
 	mmc_blk_reset_success(mq->blkdata, MMC_BLK_CQE_RECOVERY);
 
-	pr_debug("%s: CQE recovery done\n", mmc_hostname(host));
+	pr_info("%s: CQE recovery done\n", mmc_hostname(host));
 }
 
 static void mmc_blk_cqe_req_done(struct mmc_request *mrq)
@@ -2541,6 +2541,9 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	string_get_size((u64)size, 512, STRING_UNITS_2,
 			cap_str, sizeof(cap_str));
 	pr_info("%s: %s %s %s %s\n",
+		md->disk->disk_name, mmc_card_id(card), mmc_card_name(card),
+		cap_str, md->read_only ? "(ro)" : "");
+	ST_LOG("%s: %s %s %s %s\n",
 		md->disk->disk_name, mmc_card_id(card), mmc_card_name(card),
 		cap_str, md->read_only ? "(ro)" : "");
 

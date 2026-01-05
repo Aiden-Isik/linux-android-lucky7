@@ -23,6 +23,9 @@
 static irqreturn_t bad_chained_irq(int irq, void *dev_id)
 {
 	WARN_ONCE(1, "Chained irq %d should not call an action\n", irq);
+#if IS_ENABLED(CONFIG_SEC_DEBUG)
+	pr_err_ratelimited("Chained irq %d should not call an action\n", irq);
+#endif
 	return IRQ_NONE;
 }
 

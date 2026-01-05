@@ -31,6 +31,7 @@
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/sd.h>
 #include <linux/mmc/slot-gpio.h>
+#include <linux/bootconfig.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmc.h>
@@ -60,6 +61,24 @@ static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
  */
 bool use_spi_crc = 1;
 module_param(use_spi_crc, bool, 0);
+
+int mmc_custom_kernel __ro_after_init;
+static int __init custom_kernel_setup(char *str)
+{
+	if (get_option(&str, &mmc_custom_kernel))
+		pr_info("mmc custom kernel : %d", mmc_custom_kernel);
+	return 0;
+}
+
+__setup("androidboot.custom_type=", custom_kernel_setup);
+
+void __init custom_kernel_bootconfig_setup(void)
+{
+	char *value;
+
+	value = (char *)xbc_find_value("androidboot.custom_type", NULL);
+	custom_kernel_setup(value);
+}
 
 static int mmc_schedule_delayed_work(struct delayed_work *work,
 				     unsigned long delay)
@@ -546,7 +565,7 @@ int mmc_cqe_recovery(struct mmc_host *host)
 	pr_warn("%s: running CQE recovery\n", mmc_hostname(host));
 
 	host->cqe_ops->cqe_recovery_start(host);
-
+	host->cqe_ops->cqe_off(host);
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.opcode       = MMC_STOP_TRANSMISSION;
 	cmd.flags        = MMC_RSP_R1B | MMC_CMD_AC;
@@ -1854,11 +1873,15 @@ EXPORT_SYMBOL(mmc_can_discard);
 
 int mmc_can_sanitize(struct mmc_card *card)
 {
+#ifdef CONFIG_MMC_SANITIZE
 	if (!mmc_can_trim(card) && !mmc_can_erase(card))
 		return 0;
 	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
 		return 1;
+#else
+	/* Do Not use Sanitize */
 	return 0;
+#endif /* CONFIG_MMC_SANITIZE */
 }
 
 int mmc_can_secure_erase_trim(struct mmc_card *card)
@@ -2291,6 +2314,11 @@ void mmc_start_host(struct mmc_host *host)
 	}
 
 	mmc_gpiod_request_cd_irq(host);
+#if defined(CONFIG_BCM43013) || defined(CONFIG_BCM43012)
+		if (!strcmp("mmc1", mmc_hostname(host)))
+			printk("%s: bcm43012 skip mmc_detect_change\n", mmc_hostname(host));
+		else
+#endif /* CONFIG_BCM43013 */
 	_mmc_detect_change(host, 0, false);
 }
 
@@ -2343,6 +2371,8 @@ static int __init mmc_init(void)
 	if (ret)
 		goto unregister_host_class;
 
+	custom_kernel_bootconfig_setup();
+
 	return 0;
 
 unregister_host_class:
@@ -2351,6 +2381,19 @@ unregister_bus:
 	mmc_unregister_bus();
 	return ret;
 }
+
+#if defined(CONFIG_BCM43013) || defined(CONFIG_BCM43012)
+void mmc_ctrl_power(struct mmc_host *host, bool onoff)
+{
+	if (!onoff) {
+		mmc_claim_host(host);
+		mmc_set_clock(host, host->f_init);
+		mmc_delay(1);
+		mmc_release_host(host);
+	}
+}
+EXPORT_SYMBOL(mmc_ctrl_power);
+#endif /* CONFIG_BCM43013 */
 
 static void __exit mmc_exit(void)
 {

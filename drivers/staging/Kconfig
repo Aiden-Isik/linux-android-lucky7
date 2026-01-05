@@ -102,4 +102,8 @@ source "drivers/staging/qlge/Kconfig"
 
 source "drivers/staging/wfx/Kconfig"
 
+source "drivers/staging/nanohub/Kconfig"
+
+source "drivers/staging/lpd/Kconfig"
+
 endif # STAGING

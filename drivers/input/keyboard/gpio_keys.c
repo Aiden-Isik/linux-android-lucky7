@@ -30,6 +30,11 @@
 #include <linux/spinlock.h>
 #include <dt-bindings/input/gpio-keys.h>
 
+#ifdef CONFIG_KNOX_GEARPAY
+#include <linux/time.h>
+#include <linux/knox_gearpay.h>
+#endif
+
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -378,6 +383,22 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 			"failed to get gpio state: %d\n", state);
 		return;
 	}
+
+#ifdef CONFIG_KNOX_GEARPAY
+	if (button->code == 580) {
+		u32 time;
+		u32 press;
+
+		time = ktime_to_ms(ktime_get());
+		if (!!state)
+			press = BUTTON_EVENT_PRESSED;
+		else
+			press = BUTTON_EVENT_RELEASED;
+
+		knox_gearpay_hard_button_event(press, time);
+		pr_info("[sec_input] primary key: %d, time: %d\n", press, time);
+	}
+#endif
 
 	if (type == EV_ABS) {
 		if (state)

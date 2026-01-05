@@ -34,6 +34,7 @@
 #include <linux/debugfs.h>
 #include <linux/cpuhotplug.h>
 #include <linux/part_stat.h>
+#include <trace/hooks/mm.h>
 
 #include "zram_drv.h"
 
@@ -1277,12 +1278,17 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 		kunmap_atomic(dst);
 		zcomp_stream_put(zram->comp);
 	}
+
+	/* Should NEVER happen. BUG() if it does. */
+	if (unlikely(ret)) {
+		pr_err("%s Decompression failed! err=%d, page=%u, len=%u, vaddr=0x%px\n",
+		       zram->compressor, ret, index, size, src);
+		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 1, src, size, 1);
+		BUG();
+	}
+
 	zs_unmap_object(zram->mem_pool, handle);
 	zram_slot_unlock(zram, index);
-
-	/* Should NEVER happen. Return bio error if it does. */
-	if (WARN_ON(ret))
-		pr_err("Decompression failed! err=%d, page=%u\n", ret, index);
 
 	return ret;
 }
@@ -1884,6 +1890,44 @@ static const struct attribute_group *zram_disk_attr_groups[] = {
 	NULL,
 };
 
+static long get_zram_total_kbytes(struct zram *zram)
+{
+	unsigned long kbytes;
+
+	if (!zram || !down_read_trylock(&zram->init_lock))
+		return 0;
+
+	if (!init_done(zram) || !zram->mem_pool)
+		kbytes = 0;
+	else
+		kbytes = zs_get_total_pages(zram->mem_pool) << 2;
+	up_read(&zram->init_lock);
+
+	return kbytes;
+}
+
+static void zram_show_mem(void *data, unsigned int filter, nodemask_t *nodemask)
+{
+	struct zram *zram = (struct zram *)data;
+	long total_kbytes = get_zram_total_kbytes(zram);
+
+	if (total_kbytes == 0)
+		return;
+
+	pr_info("%s: %ld kB\n", zram->disk->disk_name, total_kbytes);
+}
+
+static void zram_meminfo(void *data, struct seq_file *m)
+{
+	struct zram *zram = (struct zram *)data;
+	long total_kbytes = get_zram_total_kbytes(zram);
+
+	if (total_kbytes == 0)
+		return;
+
+	show_val_meminfo(m, zram->disk->disk_name, total_kbytes);
+}
+
 /*
  * Allocate and initialize new zram device. the function returns
  * '>= 0' device_id upon success, and negative value otherwise.
@@ -1960,6 +2004,9 @@ static int zram_add(void)
 
 	zram_debugfs_register(zram);
 	pr_info("Added device: %s\n", zram->disk->disk_name);
+
+	register_trace_android_vh_show_mem(zram_show_mem, zram);
+	register_trace_android_vh_meminfo_proc_show(zram_meminfo, zram);
 	return device_id;
 
 out_free_idr:

@@ -27,6 +27,12 @@
 #include "xhci-debugfs.h"
 #include "xhci-dbgcap.h"
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+#include "../../../sound/usb/exynos_usb_audio.h"
+#include "xhci-exynos-audio.h"
+extern struct hcd_hw_info *g_hwinfo;
+#endif
+
 #define DRIVER_AUTHOR "Sarah Sharp"
 #define DRIVER_DESC "'eXtensible' Host Controller (xHC) Driver"
 
@@ -1814,8 +1820,10 @@ static int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 
 	/* Make sure the URB hasn't completed or been unlinked already */
 	ret = usb_hcd_check_unlink_urb(hcd, urb, status);
-	if (ret)
+	if (ret) {
+		xhci_info(xhci, "%s check unlink ret=%d\n", __func__, ret);
 		goto done;
+	}
 
 	/* give back URB now if we can't queue it for cancel */
 	vdev = xhci->devs[urb->dev->slot_id];
@@ -1877,6 +1885,9 @@ static int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 					urb_priv->td[i].start_seg,
 					urb_priv->td[i].first_trb));
 
+	xhci_info(xhci, "%s num_tds %d : num_tds_done %d\n", __func__,
+		  urb_priv->num_tds, urb_priv->num_tds_done);
+
 	for (; i < urb_priv->num_tds; i++) {
 		td = &urb_priv->td[i];
 		/* TD can already be on cancelled list if ep halted on it */
@@ -1890,6 +1901,7 @@ static int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 	/* Queue a stop endpoint command, but only if this is
 	 * the first cancellation to be handled.
 	 */
+	xhci_info(xhci, "%s ep_state=%d\n", __func__, ep->ep_state);
 	if (!(ep->ep_state & EP_STOP_CMD_PENDING)) {
 		command = xhci_alloc_command(xhci, false, GFP_ATOMIC);
 		if (!command) {
@@ -2025,6 +2037,29 @@ int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	u32 new_add_flags, new_drop_flags;
 	struct xhci_virt_device *virt_dev;
 	int ret = 0;
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	struct usb_endpoint_descriptor *d = &ep->desc;
+
+	/* Check Feedback Endpoint */
+	if ((d->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_ISOC) {
+		if ((d->bmAttributes & USB_ENDPOINT_USAGE_MASK) == USB_ENDPOINT_USAGE_FEEDBACK) {
+			/* Only Feedback endpoint(Not implict feedback data endpoint) */
+			if (d->bEndpointAddress & USB_ENDPOINT_DIR_MASK) {
+				g_hwinfo->fb_in_ep = d->bEndpointAddress;
+				pr_info("Feedback IN EP used #0%x 0x%x\n", d->bEndpointAddress, d->bSynchAddress);
+			} else {
+				g_hwinfo->fb_out_ep = d->bEndpointAddress;
+				pr_info("Feedback OUT EP used #0%x 0x%x\n", d->bEndpointAddress, d->bSynchAddress);
+			}
+		}
+	}
+
+	/* Check Feedback EP is already allocated */
+	if (g_hwinfo->fb_in_ep == d->bEndpointAddress || g_hwinfo->fb_out_ep == d->bEndpointAddress)
+		g_hwinfo->feedback = 1;
+	else
+		g_hwinfo->feedback = 0;
+#endif
 
 	ret = xhci_check_args(hcd, udev, ep, 1, true, __func__);
 	if (ret <= 0) {
@@ -2053,7 +2088,7 @@ int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	if (!ctrl_ctx) {
 		xhci_warn(xhci, "%s: Could not get input context, bad type.\n",
 				__func__);
-		return 0;
+		goto ret_check;
 	}
 
 	ep_index = xhci_get_endpoint_index(&ep->desc);
@@ -2074,7 +2109,7 @@ int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	if (le32_to_cpu(ctrl_ctx->add_flags) & added_ctxs) {
 		xhci_warn(xhci, "xHCI %s called with enabled ep %p\n",
 				__func__, ep);
-		return 0;
+		goto ret_check;
 	}
 
 	/*
@@ -2110,6 +2145,15 @@ int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 			udev->slot_id,
 			(unsigned int) new_drop_flags,
 			(unsigned int) new_add_flags);
+
+ret_check:
+#ifdef CONFIG_USB_XHCI_EXYNOS_AUDIO
+	if (udev->slot_id)
+		xhci_exynos_parse_endpoint(xhci, udev, &ep->desc, virt_dev->out_ctx);
+
+	pr_debug("%s ---", __func__);
+#endif
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(xhci_add_endpoint);
@@ -3022,6 +3066,17 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 			xhci_finish_resource_reservation(xhci, ctrl_ctx);
 		spin_unlock_irqrestore(&xhci->lock, flags);
 	}
+	if (ret)
+		goto failed;
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	ret = xhci_exynos_sync_dev_ctx(xhci, udev->slot_id);
+	if (ret)
+		xhci_warn(xhci, "sync device context failed, ret=%d", ret);
+#endif
+
+failed:
+
 	return ret;
 }
 
@@ -3330,6 +3385,15 @@ static void xhci_endpoint_reset(struct usb_hcd *hcd,
 
 	wait_for_completion(stop_cmd->completion);
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	err = xhci_exynos_sync_dev_ctx(xhci, udev->slot_id);
+	if (err) {
+		xhci_warn(xhci, "%s: Failed to sync device context failed, err=%d",
+			  __func__, err);
+		goto cleanup;
+	}
+#endif
+
 	spin_lock_irqsave(&xhci->lock, flags);
 
 	/* config ep command clears toggle if add and drop ep flags are set */
@@ -3360,6 +3424,13 @@ static void xhci_endpoint_reset(struct usb_hcd *hcd,
 	spin_unlock_irqrestore(&xhci->lock, flags);
 
 	wait_for_completion(cfg_cmd->completion);
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	err = xhci_exynos_sync_dev_ctx(xhci, udev->slot_id);
+	if (err)
+		xhci_warn(xhci, "%s: Failed to sync device context failed, err=%d",
+			  __func__, err);
+#endif
 
 	xhci_free_command(xhci, cfg_cmd);
 cleanup:
@@ -3906,6 +3977,15 @@ static int xhci_discover_or_reset_device(struct usb_hcd *hcd,
 	/* Wait for the Reset Device command to finish */
 	wait_for_completion(reset_device_cmd->completion);
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	ret = xhci_exynos_sync_dev_ctx(xhci, slot_id);
+	if (ret) {
+		xhci_warn(xhci, "%s: Failed to sync device context failed, err=%d",
+			  __func__, ret);
+		goto command_cleanup;
+	}
+#endif
+
 	/* The Reset Device command can't fail, according to the 0.95/0.96 spec,
 	 * unless we tried to reset a slot ID that wasn't enabled,
 	 * or the device wasn't in the addressed or configured state.
@@ -4156,6 +4236,16 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 		xhci_warn(xhci, "Could not allocate xHCI USB device data structures\n");
 		goto disable_slot;
 	}
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	ret = xhci_exynos_sync_dev_ctx(xhci, slot_id);
+	if (ret) {
+		xhci_warn(xhci, "%s: Failed to sync device context failed, err=%d",
+			  __func__, ret);
+		goto disable_slot;
+	}
+#endif
+
 	vdev = xhci->devs[slot_id];
 	slot_ctx = xhci_get_slot_ctx(xhci, vdev->out_ctx);
 	trace_xhci_alloc_dev(slot_ctx);
@@ -4286,6 +4376,15 @@ static int xhci_setup_device(struct usb_hcd *hcd, struct usb_device *udev,
 	/* ctrl tx can take up to 5 sec; XXX: need more time for xHC? */
 	wait_for_completion(command->completion);
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	ret = xhci_exynos_sync_dev_ctx(xhci, udev->slot_id);
+	if (ret) {
+		xhci_warn(xhci, "%s: Failed to sync device context failed, err=%d",
+			  __func__, ret);
+		goto out;
+	}
+#endif
+
 	/* FIXME: From section 4.3.4: "Software shall be responsible for timing
 	 * the SetAddress() "recovery interval" required by USB and aborting the
 	 * command on a timeout.
@@ -4370,10 +4469,25 @@ out:
 	return ret;
 }
 
-static int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
+int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 {
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	struct xhci_hcd *xhci;
+	int ret;
+
+	pr_debug("%s +++", __func__);
+	ret = xhci_setup_device(hcd, udev, SETUP_CONTEXT_ADDRESS);
+	xhci = hcd_to_xhci(hcd);
+
+	xhci_exynos_usb_offload_store_hw_info(xhci, hcd, udev);
+
+	pr_debug("%s ---", __func__);
+	return ret;
+#else
 	return xhci_setup_device(hcd, udev, SETUP_CONTEXT_ADDRESS);
+#endif
 }
+EXPORT_SYMBOL_GPL(xhci_address_device);
 
 static int xhci_enable_device(struct usb_hcd *hcd, struct usb_device *udev)
 {
@@ -4432,6 +4546,16 @@ static int __maybe_unused xhci_change_max_exit_latency(struct xhci_hcd *xhci,
 				__func__);
 		return -ENOMEM;
 	}
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	ret = xhci_exynos_sync_dev_ctx(xhci, udev->slot_id);
+	if (ret) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		xhci_warn(xhci, "%s: Failed to sync device context failed, err=%d",
+			  __func__, ret);
+		return ret;
+	}
+#endif
 
 	xhci_slot_copy(xhci, command->in_ctx, virt_dev->out_ctx);
 	spin_unlock_irqrestore(&xhci->lock, flags);
@@ -5194,6 +5318,17 @@ static int xhci_update_hub_device(struct usb_hcd *hcd, struct usb_device *hdev,
 		spin_unlock_irqrestore(&xhci->lock, flags);
 		return -ENOMEM;
 	}
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO_GIC
+	ret = xhci_exynos_sync_dev_ctx(xhci, hdev->slot_id);
+	if (ret) {
+		xhci_warn(xhci, "%s: Failed to sync device context failed, err=%d",
+			  __func__, ret);
+		xhci_free_command(xhci, config_cmd);
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		return ret;
+	}
+#endif
 
 	xhci_slot_copy(xhci, config_cmd->in_ctx, vdev->out_ctx);
 	ctrl_ctx->add_flags |= cpu_to_le32(SLOT_FLAG);

@@ -187,3 +187,36 @@ obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_INTERCONNECT)	+= interconnect/
 obj-$(CONFIG_COUNTER)		+= counter/
 obj-$(CONFIG_MOST)		+= most/
+obj-$(CONFIG_TRUSTONIC_TEE)	+= gud/
+
+# Bus Traffic Shaper
+obj-$(CONFIG_EXYNOS_BTS)        += bts/
+
+# vision drivers
+obj-$(CONFIG_VISION_SUPPORT)	+= vision/
+
+# ABC Driver
+obj-${CONFIG_DRV_SAMSUNG}           += samsung/
+
+ifeq ($(CONFIG_EXYNOS_VARIANT1),y)
+include $(srctree)/drivers/Makefile.variant1
+endif
+
+# uH
+obj-$(CONFIG_UH)        += uh/
+
+obj-$(CONFIG_BATTERY_SAMSUNG)   += battery/
+obj-y += sec_panel_notifier_v2/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/sec_input/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += muic/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += vibrator/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += samsung/debug/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += usb/common/vbus_notifier/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += video/fbdev/samsung/panel/s6e36w5x01/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += video/fbdev/samsung/panel/oled_common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += vibrator/common/vib_info/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/input_boost/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += video/fbdev/samsung/panel/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += samsung/pm/sec_thermistor/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/touchscreen/hideep/ist207wq/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += vibrator/hideep/ist207w/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT

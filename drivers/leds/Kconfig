@@ -873,6 +873,7 @@ config LEDS_ACER_A500
 	  Acer Iconia Tab A500.
 
 source "drivers/leds/blink/Kconfig"
+source "drivers/leds/samsung/Kconfig"
 
 comment "Flash and Torch LED drivers"
 source "drivers/leds/flash/Kconfig"

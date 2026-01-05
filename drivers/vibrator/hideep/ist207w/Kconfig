@@ -1,0 +1,10 @@
+#
+# motor drivers configuration
+#
+
+config VIB_DRV_ist207w
+	tristate "IST207W motor"
+	default n
+	depends on I2C
+	help
+	 Say Y to enable the ist207w motor driver

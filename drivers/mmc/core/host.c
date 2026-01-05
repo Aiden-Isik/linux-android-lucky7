@@ -412,6 +412,11 @@ int mmc_of_parse(struct mmc_host *host)
 		host->caps2 &= ~(MMC_CAP2_HS400_1_8V | MMC_CAP2_HS400_1_2V |
 				 MMC_CAP2_HS400_ES);
 
+	if (!!mmc_custom_kernel) {
+		pr_info("%s : Apply always-on. (%d)\n", __func__, mmc_custom_kernel);
+		host->caps2 &= ~MMC_CAP2_FULL_PWR_CYCLE;
+	}
+
 	/* Must be after "non-removable" check */
 	if (device_property_read_u32(dev, "fixed-emmc-driver-type", &drv_type) == 0) {
 		if (host->caps & MMC_CAP_NONREMOVABLE)

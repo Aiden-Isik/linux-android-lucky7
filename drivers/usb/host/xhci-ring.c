@@ -927,7 +927,7 @@ static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 	}
 
 	if (ep->ep_state & EP_HALTED) {
-		xhci_dbg(xhci, "Reset ep command for ep_index %d already pending\n",
+		xhci_info(xhci, "Reset ep command for ep_index %d already pending\n",
 			 ep->ep_index);
 		return 0;
 	}
@@ -1072,7 +1072,7 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 	struct xhci_td *td = NULL;
 	enum xhci_ep_reset_type reset_type;
 	struct xhci_command *command;
-	int err;
+	int err, ep_ctx_rsvd;
 
 	if (unlikely(TRB_TO_SUSPEND_PORT(le32_to_cpu(trb->generic.field[3])))) {
 		if (!xhci->devs[slot_id])
@@ -1107,7 +1107,7 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 	 */
 		switch (GET_EP_CTX_STATE(ep_ctx)) {
 		case EP_STATE_HALTED:
-			xhci_dbg(xhci, "Stop ep completion raced with stall, reset ep\n");
+			xhci_info(xhci, "Stop ep completion raced with stall, reset ep\n");
 			if (ep->ep_state & EP_HAS_STREAMS) {
 				reset_type = EP_SOFT_RESET;
 			} else {
@@ -1125,7 +1125,20 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 			return;
 		case EP_STATE_RUNNING:
 			/* Race, HW handled stop ep cmd before ep was running */
-			xhci_dbg(xhci, "Stop ep completion ctx error, ep is running\n");
+			xhci_info(xhci, "Stop ep completion ctx error, ep is running\n");
+			ep_ctx_rsvd = CTX_TO_RESERVED(le32_to_cpu(ep_ctx->ep_info));
+			ep_ctx_rsvd++;
+			if (ep_ctx_rsvd > 10) {
+				/*
+				 * We don't want to stay in infinite loop.
+				 * We want to giveback all invalidated tds
+				 */
+				xhci_info(xhci, "EP keeps running state in EP stop, break\n");
+				break;
+			}
+			xhci_info(xhci, "EP state check count = %d\n", ep_ctx_rsvd);
+			ep_ctx->ep_info &= cpu_to_le32(~EP_RESERVED_MASK);
+			ep_ctx->ep_info |= cpu_to_le32(EP_RESERVED(ep_ctx_rsvd));
 
 			command = xhci_alloc_command(xhci, false, GFP_ATOMIC);
 			if (!command)
@@ -1148,6 +1161,7 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 	/* Otherwise ring the doorbell(s) to restart queued transfers */
 	xhci_giveback_invalidated_tds(ep);
 	ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
+	xhci_info(xhci, "%s\n", __func__);
 }
 
 static void xhci_kill_ring_urbs(struct xhci_hcd *xhci, struct xhci_ring *ring)

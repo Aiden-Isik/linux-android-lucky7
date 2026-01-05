@@ -541,7 +541,7 @@ KBUILD_AFLAGS   := -D__ASSEMBLY__ -fno-PIE
 KBUILD_CFLAGS   := -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common -fshort-wchar -fno-PIE \
 		   -Werror=implicit-function-declaration -Werror=implicit-int \
-		   -Werror=return-type -Wno-format-security \
+		   -Werror=return-type -Wno-format-security -Wno-shift-count-overflow \
 		   -std=gnu89
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
@@ -974,7 +974,7 @@ endif
 
 ifdef CONFIG_SHADOW_CALL_STACK
 CC_FLAGS_SCS	:= -fsanitize=shadow-call-stack
-KBUILD_CFLAGS	+= $(CC_FLAGS_SCS)
+KBUILD_CFLAGS_MODULE	+= $(CC_FLAGS_SCS)
 export CC_FLAGS_SCS
 endif
 
@@ -1024,7 +1024,7 @@ endif
 
 # If LTO flags are filtered out, we must also filter out CFI.
 CC_FLAGS_LTO	+= $(CC_FLAGS_CFI)
-KBUILD_CFLAGS	+= $(CC_FLAGS_CFI)
+KBUILD_CFLAGS_MODULE	+= $(CC_FLAGS_CFI)
 export CC_FLAGS_CFI
 endif
 
@@ -1151,6 +1151,14 @@ CHECKFLAGS += $(if $(CONFIG_CPU_BIG_ENDIAN),-mbig-endian,-mlittle-endian)
 
 # the checker needs the correct machine size
 CHECKFLAGS += $(if $(CONFIG_64BIT),-m64,-m32)
+
+# Use VARIANTINCLUDE when you must reference the include directories in variant.
+# ifeq ($(CONFIG_EXYNOS_VARIANT1),y)
+VARIANTINCLUDE := \
+                $(if $(building_out_of_srctree),-I$(srctree)/include/variant1) \
+                -I$(objtree)/include/variant1
+# endif
+LINUXINCLUDE += $(VARIANTINCLUDE)
 
 # Default kernel image to build when no specific target is given.
 # KBUILD_IMAGE may be overruled on the command line or
@@ -1325,6 +1333,9 @@ archprepare: outputmakefile archheaders archscripts scripts include/config/kerne
 
 prepare0: archprepare
 	$(Q)$(MAKE) $(build)=scripts/mod
+ifeq ($(CONFIG_EXYNOS_FMP_INTEGRITY_TEST), y)
+	$(MAKE) -f $(srctree)/drivers/crypto/fmp/Makefile fips_clean
+endif
 	$(Q)$(MAKE) $(build)=.
 
 # All the preparing..
@@ -1480,7 +1491,7 @@ endif
 
 ifneq ($(dtstree),)
 
-%.dtb: include/config/kernel.release scripts_dtc
+%.dtb %.dtbo: include/config/kernel.release scripts_dtc
 	$(Q)$(MAKE) $(build)=$(dtstree) $(dtstree)/$@
 
 %.dtbo: include/config/kernel.release scripts_dtc
@@ -1579,6 +1590,11 @@ endif
 modules_install: $(modinst_pre)
 PHONY += __modinst_pre
 __modinst_pre:
+ifeq ($(CONFIG_EXYNOS_FMP_INTEGRITY_TEST), y)
+	@$(kecho) ' FIPS Generate and embed HMAC ';
+	@$(srctree)/scripts/fmp/IntegrityCheckProvider.py \
+		drivers/crypto/fmp/fmp-core.ko drivers/crypto/fmp/fips140_ic_support.c
+endif
 	@rm -rf $(MODLIB)/kernel
 	@rm -f $(MODLIB)/source
 	@mkdir -p $(MODLIB)/kernel
@@ -1625,6 +1641,9 @@ PHONY += archclean vmlinuxclean
 vmlinuxclean:
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/link-vmlinux.sh clean
 	$(Q)$(if $(ARCH_POSTLINK), $(MAKE) -f $(ARCH_POSTLINK) clean)
+
+legoclean:
+	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/lego/kclean.sh $(srctree)/.legofile
 
 clean: archclean vmlinuxclean resolve_btfids_clean
 

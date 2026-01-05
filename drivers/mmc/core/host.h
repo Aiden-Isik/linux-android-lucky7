@@ -10,6 +10,8 @@
 
 #include <linux/mmc/host.h>
 
+extern int mmc_custom_kernel __ro_after_init;
+
 int mmc_register_host_class(void);
 void mmc_unregister_host_class(void);
 

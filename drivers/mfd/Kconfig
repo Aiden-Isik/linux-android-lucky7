@@ -2231,5 +2231,10 @@ config MFD_RSMU_SPI
 	  Additional drivers must be enabled in order to use the functionality
 	  of the device.
 
+source "drivers/mfd/samsung/pmic/Kconfig"
+source "drivers/mfd/samsung/Kconfig"
+if EXYNOS_VARIANT1
+source "drivers/mfd/Kconfig.variant1"
+endif
 endmenu
 endif

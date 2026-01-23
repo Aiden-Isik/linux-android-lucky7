@@ -80,7 +80,7 @@ extern int mwriteprotect_range(struct mm_struct *dst_mm,
 static inline bool is_mergeable_vm_userfaultfd_ctx(struct vm_area_struct *vma,
 					struct vm_userfaultfd_ctx vm_ctx)
 {
-	return rcu_access_pointer(vma->vm_userfaultfd_ctx.ctx) == vm_ctx.ctx;
+	return vma->vm_userfaultfd_ctx.ctx == vm_ctx.ctx;
 }
 
 /*

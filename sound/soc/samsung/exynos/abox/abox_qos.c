@@ -163,6 +163,13 @@ static unsigned int abox_qos_target_min(struct abox_qos *qos)
 static unsigned int abox_qos_target(struct abox_qos *qos)
 {
 	switch (qos->type) {
+	/* ALL possible targets have a type of ABOX_PM_QOS_MIN/MAX.
+	 * In the extremely unlikely event that we get passed one which doesn't,
+	 * just assume ABOX_PM_QOS_MAX. */
+	default:
+		abox_dbg(dev_abox, "encountered unrecognised abox_qos type (%d), "
+				"treating as ABOX_PM_QOS_MAX (%d)\n", qos->type,
+				ABOX_PM_QOS_MAX);
 	case ABOX_PM_QOS_MAX:
 		return abox_qos_target_max(qos);
 	case ABOX_PM_QOS_MIN:

@@ -542,7 +542,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common -fshort-wchar -fno-PIE \
 		   -Werror=implicit-function-declaration -Werror=implicit-int \
 		   -Werror=return-type -Wno-format-security -Wno-shift-count-overflow \
-		   -std=gnu89
+		   -Wno-error=type-limits -std=gnu89
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
@@ -1333,9 +1333,7 @@ archprepare: outputmakefile archheaders archscripts scripts include/config/kerne
 
 prepare0: archprepare
 	$(Q)$(MAKE) $(build)=scripts/mod
-ifeq ($(CONFIG_EXYNOS_FMP_INTEGRITY_TEST), y)
 	$(MAKE) -f $(srctree)/drivers/crypto/fmp/Makefile fips_clean
-endif
 	$(Q)$(MAKE) $(build)=.
 
 # All the preparing..
@@ -1590,11 +1588,6 @@ endif
 modules_install: $(modinst_pre)
 PHONY += __modinst_pre
 __modinst_pre:
-ifeq ($(CONFIG_EXYNOS_FMP_INTEGRITY_TEST), y)
-	@$(kecho) ' FIPS Generate and embed HMAC ';
-	@$(srctree)/scripts/fmp/IntegrityCheckProvider.py \
-		drivers/crypto/fmp/fmp-core.ko drivers/crypto/fmp/fips140_ic_support.c
-endif
 	@rm -rf $(MODLIB)/kernel
 	@rm -f $(MODLIB)/source
 	@mkdir -p $(MODLIB)/kernel

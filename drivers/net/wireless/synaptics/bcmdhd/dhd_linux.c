@@ -16767,7 +16767,7 @@ dhd_module_exit(void)
 	dhd_destroy_to_notifier_skt();
 }
 
-static int
+static int __init
 _dhd_module_init(void)
 {
 	int err;

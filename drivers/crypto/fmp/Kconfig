@@ -18,14 +18,6 @@ config EXYNOS_FMP_FIPS
 	  FIPS validation driver for functional test.
 	  If unsure, say N.
 
-config EXYNOS_FMP_INTEGRITY_TEST
-	bool "Samsung EXYNOS FMP Driver for SW Integrity Test"
-	depends on EXYNOS_FMP_FIPS
-	default y
-	help
-	  Say yes here to build support for FMP (Flash Memory Protector)
-	  Integrity Test validataion.
-
 choice
 	prompt "Option for self-test failure"
 	depends on EXYNOS_FMP_FIPS

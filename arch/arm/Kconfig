@@ -1295,6 +1295,11 @@ config NR_CPUS
 	  debugging is enabled, which uses half of the per-CPU fixmap
 	  slots as guard regions.
 
+config VENDOR_NR_CPUS
+	int "Maximum number of CPUs (2-4096) governed by vendor"
+	range 2 4096
+	default "8"
+
 config HOTPLUG_CPU
 	bool "Support for hot-pluggable CPUs"
 	depends on SMP

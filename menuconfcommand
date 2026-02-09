@@ -1,0 +1,1 @@
+guix shell --container --emulate-fhs coreutils findutils diffutils grep sed make gcc-toolchain bash ncurses --preserve='^TERM$' -- bash -c "ARCH=arm64 PLATFORM_VERSION=14 make menuconfig"

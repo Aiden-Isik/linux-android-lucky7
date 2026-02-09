@@ -402,12 +402,6 @@ config BT_MTKUART
 	  Say Y here to compile support for MediaTek Bluetooth UART devices
 	  into the kernel or say M to compile it as module (btmtkuart).
 
-config BT_BCM43XX
-	tristate "Enable BCM43XX driver"
-	depends on RFKILL
-	help
-	  Adds BCM43XX RFKILL driver for Broadcom BCM43xx chipset for exynos.
-
 config BT_QCOMSMD
 	tristate "Qualcomm SMD based HCI support"
 	depends on RPMSG || (COMPILE_TEST && RPMSG=n)

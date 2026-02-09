@@ -235,11 +235,7 @@ source "drivers/interconnect/Kconfig"
 
 source "drivers/counter/Kconfig"
 
-source "drivers/bts/Kconfig"
-
 source "drivers/most/Kconfig"
-
-source "drivers/gud/Kconfig"
 
 source "drivers/vision/Kconfig"
 

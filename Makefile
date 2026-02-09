@@ -1333,7 +1333,6 @@ archprepare: outputmakefile archheaders archscripts scripts include/config/kerne
 
 prepare0: archprepare
 	$(Q)$(MAKE) $(build)=scripts/mod
-	$(MAKE) -f $(srctree)/drivers/crypto/fmp/Makefile fips_clean
 	$(Q)$(MAKE) $(build)=.
 
 # All the preparing..

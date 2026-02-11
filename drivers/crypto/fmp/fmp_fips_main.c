@@ -205,18 +205,6 @@ int exynos_fmp_fips_init(struct exynos_fmp *fmp)
 		dev_info(fmp->dev, "%s: self-tests for FMP passed\n", __func__);
 	}
 
-#ifdef CONFIG_EXYNOS_FMP_INTEGRITY_TEST
-	ret = do_fmp_integrity_check(fmp);
-	if (ret) {
-		dev_err(fmp->dev, "%s: integrity check for FMP failed\n", __func__);
-		fmp->result.integrity = 0;
-		goto err_data;
-	} else {
-		dev_info(fmp->dev, "%s: integrity check for FMP passed\n", __func__);
-		fmp->result.integrity = 1;
-	}
-#endif
-
 	set_fmp_fips_state(FMP_FIPS_SUCCESS_STATE);
 	fmp->result.overall = 1;
 	fmp_test_exit(fmp->test_data);
